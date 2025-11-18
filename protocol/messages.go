@@ -10,10 +10,10 @@ const (
 )
 
 type PlayerState struct {
-	PlayerID  string    `json:"player_id"`
-	PosX      int       `json:"pos_x"`
-	PosY      int       `json:"pos_y"`
-	Direction Direction `json:"facing"`
+	PlayerID  string       `json:"player_id"`
+	Position  Coordinate   `json:"position"`
+	Direction Direction    `json:"facing"`
+	Trail     []Coordinate `json:"trail"`
 }
 type GameState struct {
 	Players map[string]PlayerState `json:"players"`
@@ -23,4 +23,9 @@ type GameState struct {
 type PlayerInput struct {
 	PlayerID  string    `json:"player_id"`
 	Direction Direction `json:"direction"`
+}
+
+type Coordinate struct {
+	X int `json:"x"`
+	Y int `json:"y"`
 }

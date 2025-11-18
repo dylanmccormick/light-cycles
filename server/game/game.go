@@ -8,9 +8,9 @@ import (
 )
 
 type Player struct {
-	PosX      int
-	PosY      int
+	Position  protocol.Coordinate
 	Direction protocol.Direction
+	Trail     Queue
 }
 
 type Game struct {
@@ -18,6 +18,7 @@ type Game struct {
 	PlayerUpdateChan chan (protocol.PlayerInput)
 	StateUpdateChan  chan (protocol.GameState)
 	tick             int
+	Board            [][]int
 }
 
 func CreateGame() *Game {
@@ -48,12 +49,12 @@ func (g *Game) GameLoop() {
 
 func (g *Game) buildGameState() protocol.GameState {
 	players := make(map[string]protocol.PlayerState)
-	for id, state := range g.Players {
+	for id, playerState := range g.Players {
 		players[id] = protocol.PlayerState{
 			PlayerID:  id,
-			PosX:      state.PosX,
-			PosY:      state.PosY,
-			Direction: state.Direction,
+			Position:  playerState.Position,
+			Direction: playerState.Direction,
+			Trail:     playerState.Trail,
 		}
 	}
 	return protocol.GameState{
@@ -73,15 +74,20 @@ func (g *Game) updatePlayer(input protocol.PlayerInput) {
 func (g *Game) moveAllPlayers() {
 	for id, player := range g.Players {
 		log.Printf("Updating %s's position", id)
+		player.Trail.Enqueue(player.Position)
+		if len(player.Trail) > 10 {
+			player.Trail.Dequeue()
+		}
+
 		switch player.Direction {
 		case protocol.D_UP:
-			player.PosY -= 1
+			player.Position.Y -= 1
 		case protocol.D_DOWN:
-			player.PosY += 1
+			player.Position.Y += 1
 		case protocol.D_LEFT:
-			player.PosX -= 1
+			player.Position.X -= 1
 		case protocol.D_RIGHT:
-			player.PosX += 1
+			player.Position.X += 1
 		}
 
 		g.Players[id] = player
