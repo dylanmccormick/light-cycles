@@ -35,17 +35,17 @@ func Connect() {
 		for {
 			sleepTime := rand.IntN(10)
 			time.Sleep(time.Duration(sleepTime) * time.Second)
-			c.WriteJSON(createPlayerInput("player_1"))
+			dir := rand.IntN(4)
+			c.WriteJSON(createPlayerInput(protocol.Direction(dir), "player_1"))
 		}
 	}()
 
 	select {}
 }
 
-func createPlayerInput(playerID string) protocol.PlayerInput {
-	dir := rand.IntN(4)
+func createPlayerInput(dir protocol.Direction, playerID string) protocol.PlayerInput {
 	return protocol.PlayerInput{
 		PlayerID:  playerID,
-		Direction: protocol.Direction(dir),
+		Direction: dir,
 	}
 }

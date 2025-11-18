@@ -73,7 +73,6 @@ func (g *Game) updatePlayer(input protocol.PlayerInput) {
 
 func (g *Game) moveAllPlayers() {
 	for id, player := range g.Players {
-		log.Printf("Updating %s's position", id)
 		player.Trail.Enqueue(player.Position)
 		if len(player.Trail) > 10 {
 			player.Trail.Dequeue()
@@ -88,6 +87,23 @@ func (g *Game) moveAllPlayers() {
 			player.Position.X -= 1
 		case protocol.D_RIGHT:
 			player.Position.X += 1
+		}
+
+		if player.Position.Y < 0 {
+			log.Printf("looping off top")
+			player.Position.Y = 23
+		}
+		if player.Position.Y >= 24 {
+			log.Printf("looping off bottom")
+			player.Position.Y = 0
+		}
+		if player.Position.X < 0 {
+			log.Printf("looping off left")
+			player.Position.X = 23
+		}
+		if player.Position.X >= 24 {
+			log.Printf("looping off right")
+			player.Position.X = 0
 		}
 
 		g.Players[id] = player
