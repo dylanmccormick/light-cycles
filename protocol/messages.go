@@ -10,11 +10,18 @@ const (
 )
 
 type PlayerState struct {
-	PlayerID  string       `json:"player_id"`
-	Position  Coordinate   `json:"position"`
-	Direction Direction    `json:"facing"`
-	Trail     []Coordinate `json:"trail"`
+	PlayerID  string         `json:"player_id"`
+	Position  Coordinate     `json:"position"`
+	Direction Direction      `json:"direction"`
+	Trail     []TrailSegment `json:"trail"`
+	Status    string         `json:"status"`
 }
+
+type TrailSegment struct {
+	Coordinate Coordinate `json:"position"`
+	Direction  Direction  `json:"direction"`
+}
+
 type GameState struct {
 	Players map[string]PlayerState `json:"players"`
 	Tick    int                    `json:"tick"`

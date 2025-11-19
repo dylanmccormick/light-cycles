@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/dylanmccormick/light-cycles/protocol"
 	"github.com/gorilla/websocket"
 )
@@ -19,6 +20,21 @@ type RootModel struct {
 	GameComp *GameComponent
 	Messages chan (protocol.GameState)
 }
+
+type TrailRune rune
+
+const (
+	UP_RIGHT   TrailRune = '┌'
+	UP_LEFT    TrailRune = '┐'
+	DOWN_RIGHT TrailRune = '└'
+	DOWN_LEFT  TrailRune = '┘'
+	LEFT_UP    TrailRune = '└'
+	LEFT_DOWN  TrailRune = '┌'
+	RIGHT_UP   TrailRune = '┘'
+	RIGHT_DOWN TrailRune = '┐'
+	HORIZONTAL TrailRune = '─'
+	VERTICAL   TrailRune = '│'
+)
 
 var clearedBoard [][]rune
 
@@ -38,9 +54,12 @@ func NewGameComponent(conn *websocket.Conn) *GameComponent {
 }
 
 func (g *GameComponent) View() string {
+	boardStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("62"))
 	s := fmt.Sprintf("tick: %d\n", g.Tick)
-	s += fmt.Sprintf("player1: %d, %d\n", g.Players["player_1"].Position.X, g.Players["player_1"].Position.Y)
-	return s + boardToString(g.Board)
+	s += fmt.Sprintf("player1: %d, %d, %s\n", g.Players["player_1"].Position.X, g.Players["player_1"].Position.Y, g.Players["player_1"].Status)
+	return s + boardStyle.Render(boardToString(g.Board))
 }
 
 func (g *GameComponent) Update(msg tea.Msg) (GameComponent, tea.Cmd) {
@@ -54,6 +73,7 @@ func (g *GameComponent) Update(msg tea.Msg) (GameComponent, tea.Cmd) {
 
 func boardToString(board [][]rune) string {
 	var out strings.Builder
+
 	for i := range board {
 		for _, char := range board[i] {
 			out.WriteString(string(char))
@@ -70,14 +90,75 @@ func (g *GameComponent) drawBoard(msg GameStateMsg) {
 	for _, player := range g.Players {
 		px := player.Position.X
 		py := player.Position.Y
-		board[py][px] = '1'
-		for _, co := range player.Trail {
-			tx := co.X
-			ty := co.Y
-			board[ty][tx] = '-'
+		board[py][px] = getDirectionalPlayerRune(player.Direction)
+		for i, trailSeg := range player.Trail {
+			if i == 0 {
+				continue
+			}
+			tx := trailSeg.Coordinate.X
+			ty := trailSeg.Coordinate.Y
+			board[ty][tx] = rune(getDirectionalTrailRune(trailSeg, player.Trail[i-1]))
 		}
 	}
 	g.Board = board
+}
+
+func getDirectionalTrailRune(curr, prev protocol.TrailSegment) TrailRune {
+	switch prev.Direction {
+	case protocol.D_UP:
+		switch curr.Direction {
+		case protocol.D_UP:
+			return VERTICAL
+		case protocol.D_RIGHT:
+			return UP_RIGHT
+		case protocol.D_LEFT:
+			return UP_LEFT
+		}
+	case protocol.D_DOWN:
+		switch curr.Direction {
+		case protocol.D_DOWN:
+			return VERTICAL
+		case protocol.D_LEFT:
+			return DOWN_LEFT
+		case protocol.D_RIGHT:
+			return DOWN_RIGHT
+		}
+	case protocol.D_LEFT:
+		switch curr.Direction {
+		case protocol.D_LEFT:
+			return HORIZONTAL
+		case protocol.D_UP:
+			return LEFT_UP
+		case protocol.D_DOWN:
+			return LEFT_DOWN
+		}
+	case protocol.D_RIGHT:
+		switch curr.Direction {
+		case protocol.D_RIGHT:
+			return HORIZONTAL
+		case protocol.D_DOWN:
+			return RIGHT_DOWN
+		case protocol.D_UP:
+			return RIGHT_UP
+		}
+	}
+
+	return TrailRune('0')
+}
+
+func getDirectionalPlayerRune(dir protocol.Direction) rune {
+	switch dir {
+	case protocol.D_UP:
+		return '▲'
+	case protocol.D_DOWN:
+		return '▼'
+	case protocol.D_LEFT:
+		return '◄'
+	case protocol.D_RIGHT:
+		return '►'
+	}
+
+	return '1'
 }
 
 func init() {
@@ -85,7 +166,7 @@ func init() {
 	for range 24 {
 		row := []rune{}
 		for range 24 {
-			row = append(row, 'O')
+			row = append(row, ' ')
 		}
 		board = append(board, row)
 	}
@@ -98,13 +179,6 @@ func CreateConnection() *websocket.Conn {
 	if err != nil {
 		panic(err)
 	}
-	// go func() {
-	// 	for {
-	// 		sleepTime := rand.IntN(10)
-	// 		time.Sleep(time.Duration(sleepTime) * time.Second)
-	// 		c.WriteJSON(createPlayerInput("player_1"))
-	// 	}
-	// }()
 
 	return c
 }
