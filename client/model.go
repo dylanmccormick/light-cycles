@@ -90,13 +90,24 @@ func (g *GameComponent) drawBoard(msg GameStateMsg) {
 	for _, player := range g.Players {
 		px := player.Position.X
 		py := player.Position.Y
-		board[py][px] = getDirectionalPlayerRune(player.Direction)
+		if player.Status == "DEAD" {
+			if board[py][px] == 'x' {
+				board[py][px] = 'җ'
+			} else {
+				board[py][px] = 'x'
+			}
+		} else {
+			board[py][px] = getDirectionalPlayerRune(player.Direction)
+		}
 		for i, trailSeg := range player.Trail {
 			if i == 0 {
 				continue
 			}
 			tx := trailSeg.Coordinate.X
 			ty := trailSeg.Coordinate.Y
+			if board[ty][tx] == 'x' {
+				continue
+			}
 			board[ty][tx] = rune(getDirectionalTrailRune(trailSeg, player.Trail[i-1]))
 		}
 	}
@@ -165,7 +176,7 @@ func init() {
 	board := [][]rune{}
 	for range 24 {
 		row := []rune{}
-		for range 24 {
+		for range 48 {
 			row = append(row, ' ')
 		}
 		board = append(board, row)

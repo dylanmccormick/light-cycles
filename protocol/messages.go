@@ -22,6 +22,10 @@ type TrailSegment struct {
 	Direction  Direction  `json:"direction"`
 }
 
+type GameCommand struct {
+	Command string `json:"command"`
+}
+
 type GameState struct {
 	Players map[string]PlayerState `json:"players"`
 	Tick    int                    `json:"tick"`

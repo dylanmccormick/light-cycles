@@ -14,12 +14,23 @@ type Player struct {
 	Status    string
 }
 
+type GameState int
+
+const (
+	MENU GameState = iota
+	COUNTDOWN
+	RUNNING
+	ENDED
+)
+
 type Game struct {
 	Players          map[string]Player
 	PlayerUpdateChan chan (protocol.PlayerInput)
 	StateUpdateChan  chan (protocol.GameState)
+	CommandChan      chan (protocol.GameCommand)
 	tick             int
 	Board            [][]int
+	State            GameState
 }
 
 func CreateGame() *Game {
@@ -27,14 +38,40 @@ func CreateGame() *Game {
 		Players:          make(map[string]Player),
 		PlayerUpdateChan: make(chan (protocol.PlayerInput), 50),
 		StateUpdateChan:  make(chan (protocol.GameState)),
+		CommandChan:      make(chan (protocol.GameCommand)),
 		tick:             0,
 	}
 }
 
-func (g *Game) GameLoop() {
-	ticker := time.NewTicker(50 * time.Millisecond)
-	done := make(chan bool)
+func (g *Game) GameHandler() {
 	for {
+		switch g.State {
+		case MENU:
+			time.Sleep(5 * time.Second)
+			g.State = COUNTDOWN
+		case COUNTDOWN:
+			g.GameLoop()
+		}
+	}
+}
+
+func (g *Game) GameLoop() {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	done := make(chan bool)
+	countdownTime := 10
+	for {
+		if g.State == COUNTDOWN {
+			for i := range countdownTime {
+				log.Println("Time to start:", i)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			g.State = RUNNING
+		}
+
+		if g.State == ENDED {
+			break
+		}
 		select {
 		case <-done:
 			log.Println("DONE")
@@ -45,7 +82,16 @@ func (g *Game) GameLoop() {
 			g.tick += 1
 		case input := <-g.PlayerUpdateChan:
 			g.updatePlayer(input)
+		case input := <-g.CommandChan:
+			g.executeCommand(input)
 		}
+	}
+}
+
+func (g *Game) executeCommand(command protocol.GameCommand) {
+	switch command.Command {
+	case "start":
+		g.State = RUNNING
 	}
 }
 
@@ -87,6 +133,7 @@ func (g *Game) checkForCollisions() {
 			log.Printf("Killing player %s\n", i)
 			player.Status = "DEAD"
 			g.Players[i] = player
+			g.State = ENDED
 		}
 	}
 }
@@ -147,9 +194,9 @@ func (g *Game) moveAllPlayers() {
 		}
 		if player.Position.X < 0 {
 			log.Printf("looping off left")
-			player.Position.X = 23
+			player.Position.X = 47
 		}
-		if player.Position.X >= 24 {
+		if player.Position.X >= 48 {
 			log.Printf("looping off right")
 			player.Position.X = 0
 		}

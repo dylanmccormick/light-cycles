@@ -15,9 +15,10 @@ var (
 )
 
 func Run() {
-	go sGame.GameLoop()
 	sGame.Players["player_1"] = CreatePlayerOne()
 	sGame.Players["player_2"] = CreatePlayerTwo()
+	go sGame.GameHandler()
+	// go sGame.GameLoop()
 	http.HandleFunc("/", ping)
 	http.ListenAndServe("localhost:8080", nil)
 }
@@ -33,9 +34,9 @@ func CreatePlayerOne() game.Player {
 
 func CreatePlayerTwo() game.Player {
 	return game.Player{
-		Trail:     game.Queue{protocol.TrailSegment{Coordinate: protocol.Coordinate{X: 0, Y: 15}}},
-		Position:  protocol.Coordinate{X: 1, Y: 15},
-		Direction: protocol.D_RIGHT,
+		Trail:     game.Queue{protocol.TrailSegment{Coordinate: protocol.Coordinate{X: 46, Y: 15}}},
+		Position:  protocol.Coordinate{X: 47, Y: 15},
+		Direction: protocol.D_LEFT,
 		Status:    "alive",
 	}
 }
