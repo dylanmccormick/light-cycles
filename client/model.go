@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -16,9 +17,10 @@ type RootModel struct {
 	width  int
 	height int
 
-	Conn     *websocket.Conn
-	GameComp *GameComponent
-	Messages chan (protocol.GameState)
+	Conn             *websocket.Conn
+	GameComp         *GameComponent
+	Messages         chan (protocol.GameState)
+	PlayerAssignment string
 }
 
 type TrailRune rune
@@ -39,17 +41,19 @@ const (
 var clearedBoard [][]rune
 
 type GameComponent struct {
-	Players map[string]protocol.PlayerState
-	Board   [][]rune
-	Tick    int
-	Conn    *websocket.Conn
+	Players   map[string]protocol.PlayerState
+	Board     [][]rune
+	Tick      int
+	Conn      *websocket.Conn
+	Countdown int
 }
 
 func NewGameComponent(conn *websocket.Conn) *GameComponent {
 	return &GameComponent{
-		Players: make(map[string]protocol.PlayerState),
-		Board:   clearedBoard,
-		Conn:    conn,
+		Players:   make(map[string]protocol.PlayerState),
+		Board:     clearedBoard,
+		Conn:      conn,
+		Countdown: 0,
 	}
 }
 
@@ -60,6 +64,11 @@ func (g *GameComponent) View() string {
 	s := fmt.Sprintf("tick: %d\n", g.Tick)
 	s += fmt.Sprintf("player1: %d, %d, %s\n", g.Players["player_1"].Position.X, g.Players["player_1"].Position.Y, g.Players["player_1"].Status)
 	s += fmt.Sprintf("score:\n\t player1: %d\n\t player2: %d\n", g.Players["player_1"].Points, g.Players["player_2"].Points)
+	if g.Countdown > 0 {
+		s += fmt.Sprintf("Game starting in: %d seconds\n", g.Countdown)
+	} else {
+		s += "\n"
+	}
 	return s + boardStyle.Render(boardToString(g.Board))
 }
 
@@ -87,6 +96,7 @@ func boardToString(board [][]rune) string {
 func (g *GameComponent) drawBoard(msg GameStateMsg) {
 	g.Players = msg.Message.Players
 	g.Tick = msg.Message.Tick
+	g.Countdown = msg.Message.Countdown
 	board := copyBoard(clearedBoard)
 	for _, player := range g.Players {
 		px := player.Position.X
@@ -219,18 +229,21 @@ func (rm *RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		rm.width = msg.Width
 		rm.height = msg.Height
+	case PlayerAssignmentMsg:
+		rm.PlayerAssignment = msg.Message.PlayerID
+		return rm, pollGame(rm.GameComp.Conn)
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter":
 			rm.Conn.WriteJSON(createGameCommand("start"))
 		case "w", "up":
-			rm.Conn.WriteJSON(createPlayerMessage(protocol.D_UP, "player_1"))
+			rm.Conn.WriteJSON(createPlayerMessage(protocol.D_UP, rm.PlayerAssignment))
 		case "s", "down":
-			rm.Conn.WriteJSON(createPlayerMessage(protocol.D_DOWN, "player_1"))
+			rm.Conn.WriteJSON(createPlayerMessage(protocol.D_DOWN, rm.PlayerAssignment))
 		case "a", "left":
-			rm.Conn.WriteJSON(createPlayerMessage(protocol.D_LEFT, "player_1"))
+			rm.Conn.WriteJSON(createPlayerMessage(protocol.D_LEFT, rm.PlayerAssignment))
 		case "d", "right":
-			rm.Conn.WriteJSON(createPlayerMessage(protocol.D_RIGHT, "player_1"))
+			rm.Conn.WriteJSON(createPlayerMessage(protocol.D_RIGHT, rm.PlayerAssignment))
 
 		case "ctrl+c":
 			return rm, tea.Quit
@@ -244,9 +257,32 @@ func (rm *RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 type GameStateMsg struct {
 	Message protocol.GameState
 }
+type PlayerAssignmentMsg struct {
+	Message protocol.PlayerAssignment
+}
 
+// TODO: We need to show rootModel information above game information. OR to the left or whatever
 func (rm *RootModel) View() string {
-	return rm.GameComp.View()
+	left := rm.RenderLeft()
+	game := rm.GameComp.View()
+	return lipgloss.JoinHorizontal(lipgloss.Top, game, left)
+}
+
+func (rm *RootModel) RenderGame() string {
+	content := rm.GameComp.View()
+	style := lipgloss.NewStyle().
+		Width(rm.width / 2)
+	return style.Render(content)
+}
+
+func (rm RootModel) RenderLeft() string {
+	content := fmt.Sprintf("PlayerID: %s", rm.PlayerAssignment)
+	headerStyle := lipgloss.NewStyle().
+		Width(rm.width / 2).
+		Height(rm.height - 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("62"))
+	return headerStyle.Render(content)
 }
 
 func (rm *RootModel) Init() tea.Cmd {
@@ -257,14 +293,29 @@ func (rm *RootModel) Init() tea.Cmd {
 
 func pollGame(c *websocket.Conn) tea.Cmd {
 	return func() tea.Msg {
-		var msg protocol.GameState
+		var msg protocol.Message
 		err := c.ReadJSON(&msg)
 		if err != nil {
 			panic(err)
 		}
-
-		return GameStateMsg{Message: msg}
+		// return GameStateMsg{Message: msg}
+		return processMessage(msg)
 	}
+}
+
+func processMessage(msg protocol.Message) any {
+	switch msg.Type {
+	case "GameState":
+		var body protocol.GameState
+		json.Unmarshal(msg.Body, &body)
+		return GameStateMsg{Message: body}
+	case "PlayerAssignment":
+		var body protocol.PlayerAssignment
+		json.Unmarshal(msg.Body, &body)
+		return PlayerAssignmentMsg{Message: body}
+	}
+
+	return nil
 }
 
 func copyBoard(og [][]rune) [][]rune {

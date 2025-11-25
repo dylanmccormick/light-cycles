@@ -16,30 +16,46 @@ var (
 )
 
 func Run() {
-	sGame.Players["player_1"] = game.CreatePlayerOne(0)
-	sGame.Players["player_2"] = game.CreatePlayerTwo(0)
 	go sGame.GameHandler()
-	// go sGame.GameLoop()
+	go broadcastMessages()
 	http.HandleFunc("/", ping)
 	http.ListenAndServe("localhost:8080", nil)
 }
 
-func CreatePlayerOne() game.Player {
-	return game.Player{
+func CreatePlayerOne(c *websocket.Conn) *game.Player {
+	return &game.Player{
 		Trail:     game.Queue{protocol.TrailSegment{Coordinate: protocol.Coordinate{X: 0, Y: 15}}},
 		Position:  protocol.Coordinate{X: 1, Y: 15},
 		Direction: protocol.D_RIGHT,
 		Status:    "alive",
+		Conn:      c,
+		Points:    0,
 	}
 }
 
-func CreatePlayerTwo() game.Player {
-	return game.Player{
+func CreatePlayerTwo(c *websocket.Conn) *game.Player {
+	return &game.Player{
 		Trail:     game.Queue{protocol.TrailSegment{Coordinate: protocol.Coordinate{X: 46, Y: 15}}},
 		Position:  protocol.Coordinate{X: 47, Y: 15},
 		Direction: protocol.D_LEFT,
 		Status:    "alive",
+		Conn:      c,
+		Points:    0,
 	}
+}
+
+func sendPlayerAssignmentMessage(c *websocket.Conn, playerID string) {
+	body, err := json.Marshal(protocol.PlayerAssignment{
+		PlayerID: playerID,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	msg := protocol.Message{
+		Type: "PlayerAssignment",
+		Body: body,
+	}
+	c.WriteJSON(msg)
 }
 
 func ping(w http.ResponseWriter, r *http.Request) {
@@ -47,18 +63,33 @@ func ping(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println("upgrade:", err)
 	}
+	var playerAssignment string
+	if _, ok := sGame.Players["player_1"]; !ok {
+		playerAssignment = "player_1"
+		sGame.Players["player_1"] = CreatePlayerOne(c)
+	} else {
+		playerAssignment = "player_2"
+		sGame.Players["player_2"] = CreatePlayerTwo(c)
+	}
+
+	sendPlayerAssignmentMessage(c, playerAssignment)
 
 	go func() {
 		for {
 			processMessage(c)
-			// var input protocol.PlayerInput
-			// c.ReadJSON(&input)
-			// sGame.PlayerUpdateChan <- input
 		}
 	}()
 
+	select {}
+}
+
+func broadcastMessages() {
 	for msg := range sGame.StateUpdateChan {
-		c.WriteJSON(msg)
+		for _, player := range sGame.Players {
+			if player.Conn != nil {
+				player.Conn.WriteJSON(msg)
+			}
+		}
 	}
 }
 

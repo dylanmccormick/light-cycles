@@ -13,10 +13,11 @@ Why websockets? They are cool
 
 ## TODO:
 
-1. Create menu screens and commands. 
-    - Start game
-    - restart game
+1. Create menu screens and commands.  
+    - Start game - done
+    - restart game - done
 2. Display messages for updates from the game (countdown timer)
+    - I think all of this stuff is just sent in game state? I'm not sure but I think that's like a good practice. 
 
 - Player hitting key opposite of current direction kills self
 

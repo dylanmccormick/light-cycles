@@ -1,11 +1,13 @@
 package game
 
 import (
+	"encoding/json"
 	"log"
 	"strings"
 	"time"
 
 	"github.com/dylanmccormick/light-cycles/protocol"
+	"github.com/gorilla/websocket"
 )
 
 type Player struct {
@@ -14,6 +16,7 @@ type Player struct {
 	Trail     Queue
 	Status    string
 	Points    int
+	Conn      *websocket.Conn
 }
 
 type GameState int
@@ -26,48 +29,51 @@ const (
 )
 
 type Game struct {
-	Players          map[string]Player
+	Players          map[string]*Player
 	PlayerUpdateChan chan (protocol.PlayerInput)
-	StateUpdateChan  chan (protocol.GameState)
+	StateUpdateChan  chan (protocol.Message)
 	CommandChan      chan (protocol.GameCommand)
 	tick             int
 	Board            [][]int
 	State            GameState
+	Countdown        int
 }
 
 func CreateGame() *Game {
 	return &Game{
-		Players:          make(map[string]Player),
+		Players:          make(map[string]*Player),
 		PlayerUpdateChan: make(chan (protocol.PlayerInput), 50),
-		StateUpdateChan:  make(chan (protocol.GameState)),
+		StateUpdateChan:  make(chan (protocol.Message)),
 		CommandChan:      make(chan (protocol.GameCommand)),
 		tick:             0,
 	}
 }
 
-func CreatePlayerOne(points int) Player {
-	return Player{
+func CreatePlayerOne(points int, conn *websocket.Conn) *Player {
+	return &Player{
 		Trail:     Queue{protocol.TrailSegment{Coordinate: protocol.Coordinate{X: 0, Y: 15}}},
 		Position:  protocol.Coordinate{X: 1, Y: 15},
 		Direction: protocol.D_RIGHT,
 		Status:    "alive",
 		Points:    points,
+		Conn: conn,
 	}
 }
 
-func CreatePlayerTwo(points int) Player {
-	return Player{
+func CreatePlayerTwo(points int, conn *websocket.Conn) *Player {
+	return &Player{
 		Trail:     Queue{protocol.TrailSegment{Coordinate: protocol.Coordinate{X: 46, Y: 15}}},
 		Position:  protocol.Coordinate{X: 47, Y: 15},
 		Direction: protocol.D_LEFT,
 		Status:    "alive",
 		Points:    points,
+		Conn: conn,
 	}
 }
 
 func (g *Game) ResetGame() {
-	g.Players["player_1"] = CreatePlayerOne(g.Players["player_1"].Points)
-	g.Players["player_2"] = CreatePlayerTwo(g.Players["player_2"].Points)
+	g.Players["player_1"] = CreatePlayerOne(g.Players["player_1"].Points, g.Players["player_1"].Conn)
+	g.Players["player_2"] = CreatePlayerTwo(g.Players["player_2"].Points, g.Players["player_2"].Conn)
 }
 
 func (g *Game) ProcessCommand(cmd protocol.GameCommand) {
@@ -98,9 +104,10 @@ func (g *Game) GameLoop() {
 	countdownTime := 10
 	for {
 		if g.State == COUNTDOWN {
-			for i := range countdownTime {
-				log.Println("Time to start:", i)
+			for i := countdownTime; i > 0; i-- {
 				time.Sleep(1 * time.Second)
+				g.StateUpdateChan <- g.buildGameState()
+				g.Countdown = i
 				continue
 			}
 			g.State = RUNNING
@@ -144,7 +151,7 @@ func containsCoords(coords []protocol.Coordinate, target protocol.Coordinate) bo
 func (g *Game) checkForCollisions() {
 	var killPlayers bool
 	var trailCoordinates []protocol.Coordinate
-	var players []Player
+	var players []*Player
 	for _, player := range g.Players {
 		players = append(players, player)
 		for i, ts := range player.Trail {
@@ -157,17 +164,12 @@ func (g *Game) checkForCollisions() {
 	}
 	if players[0].Position == players[1].Position {
 		for id, player := range g.Players {
-			log.Println("COLLIDED IN SAME SPOT")
 			player.Status = "DEAD"
 			g.Players[id] = player
 			killPlayers = true
 		}
 	}
-	log.Println("trails:", trailCoordinates)
 	for i, player := range g.Players {
-		log.Println("player pos", player.Position)
-		kill := containsCoords(trailCoordinates, player.Position)
-		log.Println("SHOULD KILL?:", kill)
 		if containsCoords(trailCoordinates, player.Position) {
 			log.Printf("Killing player %s\n", i)
 			player.Status = "DEAD"
@@ -190,7 +192,7 @@ func (g *Game) checkForCollisions() {
 	}
 }
 
-func (g *Game) buildGameState() protocol.GameState {
+func (g *Game) buildGameState() protocol.Message {
 	players := make(map[string]protocol.PlayerState)
 	for id, playerState := range g.Players {
 		players[id] = protocol.PlayerState{
@@ -202,16 +204,49 @@ func (g *Game) buildGameState() protocol.GameState {
 			Points:    playerState.Points,
 		}
 	}
-	return protocol.GameState{
-		Players: players,
-		Tick:    g.tick,
+	body, err := json.Marshal(protocol.GameState{
+		Players:   players,
+		Tick:      g.tick,
+		Countdown: g.Countdown,
+	})
+	if err != nil {
+		log.Fatal("Unable to marshal json for gamestate", err)
 	}
+	return protocol.Message{
+		Type: "GameState",
+		Body: body,
+	}
+}
+
+func isLegalDirectionChange(original, change protocol.Direction) bool {
+	switch original {
+	case protocol.D_UP:
+		if change == protocol.D_DOWN {
+			return false
+		}
+	case protocol.D_DOWN:
+		if change == protocol.D_UP {
+			return false
+		}
+	case protocol.D_LEFT:
+		if change == protocol.D_RIGHT {
+			return false
+		}
+	case protocol.D_RIGHT:
+		if change == protocol.D_LEFT {
+			return false
+		}
+	}
+	return true
 }
 
 func (g *Game) updatePlayer(input protocol.PlayerInput) {
 	if player, exists := g.Players[input.PlayerID]; exists {
-		log.Printf("Updating %s's direction to %d\n", input.PlayerID, input.Direction)
-		player.Direction = input.Direction
+		if isLegalDirectionChange(player.Direction, input.Direction) {
+			player.Direction = input.Direction
+		} else {
+			log.Printf("Bad direction change. Can't go from %d to %d\n", player.Direction, input.Direction)
+		}
 		g.Players[input.PlayerID] = player
 	}
 }
@@ -238,19 +273,15 @@ func (g *Game) moveAllPlayers() {
 		}
 
 		if player.Position.Y < 0 {
-			log.Printf("looping off top")
 			player.Position.Y = 23
 		}
 		if player.Position.Y >= 24 {
-			log.Printf("looping off bottom")
 			player.Position.Y = 0
 		}
 		if player.Position.X < 0 {
-			log.Printf("looping off left")
 			player.Position.X = 47
 		}
 		if player.Position.X >= 48 {
-			log.Printf("looping off right")
 			player.Position.X = 0
 		}
 

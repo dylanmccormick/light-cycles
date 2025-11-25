@@ -16,6 +16,9 @@ type Message struct {
 	Body json.RawMessage `json:"body"`
 }
 
+type PlayerAssignment struct {
+	PlayerID string `json:"player_id"`
+}
 type PlayerState struct {
 	PlayerID  string         `json:"player_id"`
 	Position  Coordinate     `json:"position"`
@@ -34,13 +37,10 @@ type GameCommand struct {
 	Command string `json:"command"`
 }
 
-type Countdown struct {
-	Count int `json:"count"`
-}
-
 type GameState struct {
-	Players map[string]PlayerState `json:"players"`
-	Tick    int                    `json:"tick"`
+	Players   map[string]PlayerState `json:"players"`
+	Tick      int                    `json:"tick"`
+	Countdown int                    `json:"countdown"` // time until game starts
 }
 
 type PlayerInput struct {
