@@ -2,6 +2,7 @@ package game
 
 import (
 	"log"
+	"strings"
 	"time"
 
 	"github.com/dylanmccormick/light-cycles/protocol"
@@ -12,6 +13,7 @@ type Player struct {
 	Direction protocol.Direction
 	Trail     Queue
 	Status    string
+	Points    int
 }
 
 type GameState int
@@ -43,12 +45,47 @@ func CreateGame() *Game {
 	}
 }
 
+func CreatePlayerOne(points int) Player {
+	return Player{
+		Trail:     Queue{protocol.TrailSegment{Coordinate: protocol.Coordinate{X: 0, Y: 15}}},
+		Position:  protocol.Coordinate{X: 1, Y: 15},
+		Direction: protocol.D_RIGHT,
+		Status:    "alive",
+		Points:    points,
+	}
+}
+
+func CreatePlayerTwo(points int) Player {
+	return Player{
+		Trail:     Queue{protocol.TrailSegment{Coordinate: protocol.Coordinate{X: 46, Y: 15}}},
+		Position:  protocol.Coordinate{X: 47, Y: 15},
+		Direction: protocol.D_LEFT,
+		Status:    "alive",
+		Points:    points,
+	}
+}
+
+func (g *Game) ResetGame() {
+	g.Players["player_1"] = CreatePlayerOne(g.Players["player_1"].Points)
+	g.Players["player_2"] = CreatePlayerTwo(g.Players["player_2"].Points)
+}
+
+func (g *Game) ProcessCommand(cmd protocol.GameCommand) {
+	if strings.Contains("start", cmd.Command) {
+		g.ResetGame()
+		g.State = COUNTDOWN
+		return
+	}
+}
+
 func (g *Game) GameHandler() {
 	for {
+		select {
+		case cmd := <-g.CommandChan:
+			g.ProcessCommand(cmd)
+		default:
+		}
 		switch g.State {
-		case MENU:
-			time.Sleep(5 * time.Second)
-			g.State = COUNTDOWN
 		case COUNTDOWN:
 			g.GameLoop()
 		}
@@ -105,6 +142,7 @@ func containsCoords(coords []protocol.Coordinate, target protocol.Coordinate) bo
 }
 
 func (g *Game) checkForCollisions() {
+	var killPlayers bool
 	var trailCoordinates []protocol.Coordinate
 	var players []Player
 	for _, player := range g.Players {
@@ -122,6 +160,7 @@ func (g *Game) checkForCollisions() {
 			log.Println("COLLIDED IN SAME SPOT")
 			player.Status = "DEAD"
 			g.Players[id] = player
+			killPlayers = true
 		}
 	}
 	log.Println("trails:", trailCoordinates)
@@ -133,8 +172,21 @@ func (g *Game) checkForCollisions() {
 			log.Printf("Killing player %s\n", i)
 			player.Status = "DEAD"
 			g.Players[i] = player
-			g.State = ENDED
+			killPlayers = true
 		}
+	}
+	if killPlayers {
+		p1 := g.Players["player_1"]
+		p2 := g.Players["player_2"]
+		if p1.Status == "DEAD" {
+			p2.Points += 1
+		}
+		if p2.Status == "DEAD" {
+			p1.Points += 1
+		}
+		g.Players["player_1"] = p1
+		g.Players["player_2"] = p2
+		g.State = ENDED
 	}
 }
 
@@ -147,6 +199,7 @@ func (g *Game) buildGameState() protocol.GameState {
 			Direction: playerState.Direction,
 			Trail:     playerState.Trail,
 			Status:    playerState.Status,
+			Points:    playerState.Points,
 		}
 	}
 	return protocol.GameState{

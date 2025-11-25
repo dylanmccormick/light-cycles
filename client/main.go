@@ -36,16 +36,38 @@ func Connect() {
 			sleepTime := rand.IntN(10)
 			time.Sleep(time.Duration(sleepTime) * time.Second)
 			dir := rand.IntN(4)
-			c.WriteJSON(createPlayerInput(protocol.Direction(dir), "player_1"))
+			c.WriteJSON(createPlayerMessage(protocol.Direction(dir), "player_1"))
 		}
 	}()
 
 	select {}
 }
 
-func createPlayerInput(dir protocol.Direction, playerID string) protocol.PlayerInput {
-	return protocol.PlayerInput{
+func createPlayerMessage(dir protocol.Direction, playerID string) protocol.Message {
+	pi := protocol.PlayerInput{
 		PlayerID:  playerID,
 		Direction: dir,
+	}
+	body, err := json.Marshal(pi)
+	if err != nil {
+		log.Fatal("You did a bad json")
+	}
+	return protocol.Message{
+		Type: "PlayerInput",
+		Body: body,
+	}
+}
+
+func createGameCommand(cmd string) protocol.Message {
+	gc := protocol.GameCommand{
+		Command: cmd,
+	}
+	body, err := json.Marshal(gc)
+	if err != nil {
+		log.Fatal("You did a bad json")
+	}
+	return protocol.Message{
+		Type: "GameCommand",
+		Body: body,
 	}
 }

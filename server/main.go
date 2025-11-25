@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 
@@ -15,8 +16,8 @@ var (
 )
 
 func Run() {
-	sGame.Players["player_1"] = CreatePlayerOne()
-	sGame.Players["player_2"] = CreatePlayerTwo()
+	sGame.Players["player_1"] = game.CreatePlayerOne(0)
+	sGame.Players["player_2"] = game.CreatePlayerTwo(0)
 	go sGame.GameHandler()
 	// go sGame.GameLoop()
 	http.HandleFunc("/", ping)
@@ -49,13 +50,35 @@ func ping(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		for {
-			var input protocol.PlayerInput
-			c.ReadJSON(&input)
-			sGame.PlayerUpdateChan <- input
+			processMessage(c)
+			// var input protocol.PlayerInput
+			// c.ReadJSON(&input)
+			// sGame.PlayerUpdateChan <- input
 		}
 	}()
 
 	for msg := range sGame.StateUpdateChan {
 		c.WriteJSON(msg)
+	}
+}
+
+func processMessage(c *websocket.Conn) {
+	var input protocol.Message
+	c.ReadJSON(&input)
+	switch input.Type {
+	case "GameCommand":
+		var gc protocol.GameCommand
+		err := json.Unmarshal(input.Body, &gc)
+		if err != nil {
+			log.Fatal("Unable to unmarshal gameCommand:", err)
+		}
+		sGame.CommandChan <- gc
+	case "PlayerInput":
+		var pi protocol.PlayerInput
+		err := json.Unmarshal(input.Body, &pi)
+		if err != nil {
+			log.Fatal("Unable to unmarshal gameCommand:", err)
+		}
+		sGame.PlayerUpdateChan <- pi
 	}
 }

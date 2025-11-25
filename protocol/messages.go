@@ -1,5 +1,7 @@
 package protocol
 
+import "encoding/json"
+
 type Direction int
 
 const (
@@ -9,12 +11,18 @@ const (
 	D_RIGHT
 )
 
+type Message struct {
+	Type string          `json:"type"`
+	Body json.RawMessage `json:"body"`
+}
+
 type PlayerState struct {
 	PlayerID  string         `json:"player_id"`
 	Position  Coordinate     `json:"position"`
 	Direction Direction      `json:"direction"`
 	Trail     []TrailSegment `json:"trail"`
 	Status    string         `json:"status"`
+	Points    int            `json:"points"`
 }
 
 type TrailSegment struct {
@@ -24,6 +32,10 @@ type TrailSegment struct {
 
 type GameCommand struct {
 	Command string `json:"command"`
+}
+
+type Countdown struct {
+	Count int `json:"count"`
 }
 
 type GameState struct {

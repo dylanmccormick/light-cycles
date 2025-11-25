@@ -59,6 +59,7 @@ func (g *GameComponent) View() string {
 		BorderForeground(lipgloss.Color("62"))
 	s := fmt.Sprintf("tick: %d\n", g.Tick)
 	s += fmt.Sprintf("player1: %d, %d, %s\n", g.Players["player_1"].Position.X, g.Players["player_1"].Position.Y, g.Players["player_1"].Status)
+	s += fmt.Sprintf("score:\n\t player1: %d\n\t player2: %d\n", g.Players["player_1"].Points, g.Players["player_2"].Points)
 	return s + boardStyle.Render(boardToString(g.Board))
 }
 
@@ -220,14 +221,16 @@ func (rm *RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		rm.height = msg.Height
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "w":
-			rm.Conn.WriteJSON(createPlayerInput(protocol.D_UP, "player_1"))
-		case "s":
-			rm.Conn.WriteJSON(createPlayerInput(protocol.D_DOWN, "player_1"))
-		case "a":
-			rm.Conn.WriteJSON(createPlayerInput(protocol.D_LEFT, "player_1"))
-		case "d":
-			rm.Conn.WriteJSON(createPlayerInput(protocol.D_RIGHT, "player_1"))
+		case "enter":
+			rm.Conn.WriteJSON(createGameCommand("start"))
+		case "w", "up":
+			rm.Conn.WriteJSON(createPlayerMessage(protocol.D_UP, "player_1"))
+		case "s", "down":
+			rm.Conn.WriteJSON(createPlayerMessage(protocol.D_DOWN, "player_1"))
+		case "a", "left":
+			rm.Conn.WriteJSON(createPlayerMessage(protocol.D_LEFT, "player_1"))
+		case "d", "right":
+			rm.Conn.WriteJSON(createPlayerMessage(protocol.D_RIGHT, "player_1"))
 
 		case "ctrl+c":
 			return rm, tea.Quit

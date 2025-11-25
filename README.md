@@ -10,3 +10,16 @@ Why websockets? They are cool
 ## How to run
 <!-- TODO -->
 
+
+## TODO:
+
+1. Create menu screens and commands. 
+    - Start game
+    - restart game
+2. Display messages for updates from the game (countdown timer)
+
+- Player hitting key opposite of current direction kills self
+
+## V2:
+- Server with rooms
+
