@@ -12,7 +12,7 @@ Why websockets? They are cool
 
 1. Run the server using the command `go run . "run"`. Unless you built the binary then you can do `./<program> "run"`
 2. In another terminal (tmux btw) `go run . "tui"`
-3. In another another terminal run the same command. 
+3. In another another terminal run the same command.
 
 Press enter to start or restart the game
 
